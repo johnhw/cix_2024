@@ -1,8 +1,11 @@
 from key_test import capture_keys
 from tkanvas import TKanvas
+from key_model import KeyModel
+import cmasher
 import queue
 import shelve
 from tkinter import mainloop
+from pathlib import Path
 
 import numpy as np
 from multiprocessing import Queue, Process
@@ -47,50 +50,6 @@ class TKMatrix(object):
                 color = self.cmap(matrix[i, j])[:3]
                 self.canvas.canvas.itemconfig(self.rects[ix], fill=tkcolor(color))
 
-class KeyModel:
-    def __init__(self, key_map, size, bw=0.02, noise=0.0001, alpha=0.8, intensity=2.0):
-        self.key_map = key_map
-        self.states = {}
-        self.img_width = key_map["width"]
-        self.img_height = key_map["height"]
-        self.key_image = np.zeros((size, size)) 
-        self.key_buffer = np.zeros((size, size))
-        self.key_mesh = np.meshgrid(np.linspace(0, 1, size), np.linspace(0, 1, size))
-        self.x_scale = 1.0 / max(self.img_width, self.img_height)
-        self.y_scale = 1.0 / max(self.img_height, self.img_width) 
-        self.x_offset = (1.0 - self.img_width * self.x_scale) / 2
-        self.y_offset = (1.0 - self.img_height * self.y_scale) / 2
-        self.noise = noise 
-        self.alpha = alpha 
-        self.bw = bw 
-        self.intensity = intensity
-        
-    def kernel(self, ix, iy):
-        # convert to (0,1) normalised coordinates
-        x = (ix) * self.x_scale #+ self.x_offset
-        y = (iy) * self.y_scale #+ self.y_offset        
-        mx, my = self.key_mesh 
-        # eval kernel
-        return np.exp(-((((mx-x) ** 2 + (my-y) ** 2) / (2 * self.bw ** 2)))) * self.intensity
-
-    def up(self, code):
-        if code not in self.states:
-            self.states[code] = "down"
-        if code in self.key_map and self.states[code] == "down":
-            self.key_image -= self.kernel(*self.key_map[code])
-            self.states[code] = "up"
-
-    def down(self, code):
-        if code not in self.states:
-            self.states[code] = "up"
-        if code in self.key_map and self.states[code] == "up":
-            self.key_image += self.kernel(*self.key_map[code])
-            self.states[code] = "down"
-
-    def tick(self):
-        self.key_buffer = self.alpha * self.key_buffer + (1 - self.alpha) * self.key_image
-        self.key_buffer += np.random.normal(0, self.noise, self.key_image.shape)
-        self.key_buffer = np.clip(self.key_buffer, 0, 1)        
 
 
 class KeyDisplay(object):
@@ -100,13 +59,14 @@ class KeyDisplay(object):
         res=32,
         alpha=0.7,
         noise=0.02,     
-        bw=0.025,   
-        intensity=2.5,
-        slc=(9,26),
+        bw=0.03,   
+        intensity=1.8,
+        slc=(9,30),
     ):        
         
         self.q = q  # keyboard input
-        self.key_map = shelve.open("keymap.db")    # connect to the keymap database
+        self.local_dir = Path(__file__).parent
+        self.key_map = shelve.open(self.local_dir / "keymap.db")    # connect to the keymap database
         self.model = KeyModel(self.key_map, res, alpha=alpha, noise=noise, bw=bw, intensity=intensity)
         self.block_size = 24
         self.slc = slc
@@ -120,7 +80,7 @@ class KeyDisplay(object):
         )
 
         self.canvas.title("Ctrl-ESC-ESC-ESC to quit")
-        self.matrix_display = TKMatrix(self.canvas, slc, self.block_size)                
+        self.matrix_display = TKMatrix(self.canvas, slc, self.block_size, cmap=cmasher.cm.bubblegum)                
         self.text = self.canvas.text(
             self.block_size / 2,
             self.canvas.h - self.block_size / 2,

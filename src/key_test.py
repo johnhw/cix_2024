@@ -38,6 +38,7 @@ def capture_keys(queue):
     exit_seq = on_sequence([29,1])
     while running:
         k = keyboard.read_event(True)    
+        pad_flag = 65535 if k.is_keypad else 0        
         if k.scan_code<len(all_keys) and k.scan_code>=0:            
             if k.event_type=="up" and all_keys[k.scan_code]!=0:
                 all_keys[k.scan_code] = 0.0
@@ -46,7 +47,7 @@ def capture_keys(queue):
                 if exit_seq(k.scan_code):
                     running = False
         
-        queue.put((all_keys.tobytes(), k.time, k.scan_code, k.event_type, k.name))
+        queue.put((all_keys.tobytes(), k.time, k.scan_code+pad_flag, k.event_type, k.name))
     keyboard.restore_state(current_state)  
     time.sleep(0.05)
     keyboard.restore_state(current_state)  
