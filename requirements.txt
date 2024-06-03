@@ -1,0 +1,6 @@
+keyboard
+matplotlib
+numpy
+scipy
+ipykernel
+jupyter
