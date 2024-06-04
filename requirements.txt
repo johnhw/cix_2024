@@ -6,3 +6,8 @@ ipykernel
 jupyter
 pillow
 cmasher
+jax
+optax
+flax
+click
+scikit-learn
