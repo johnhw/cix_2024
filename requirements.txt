@@ -11,3 +11,4 @@ optax
 flax
 click
 scikit-learn
+zmq

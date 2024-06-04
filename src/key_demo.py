@@ -6,13 +6,15 @@ import csv
 import queue
 import shelve
 from tkinter import mainloop
+import tkinter as tk
 from pathlib import Path
 
 import numpy as np
 from multiprocessing import Queue, Process
-
+import zmq
 import time
 import matplotlib.pyplot as plt
+import json
 
 
 def tkcolor(rgb):
@@ -52,6 +54,12 @@ class TKMatrix(object):
         
         return nx, ny 
     
+    def unnormalised_coordinates(self, nx, ny):
+        # return screen coordinates from normalised coordinates
+        width = self.shape[1] * self.size
+        height = self.shape[0] * self.size
+        x, y = nx * width + self.origin[0], ny * height + self.origin[1]
+        return x, y
 
     def update(self, matrix):
         assert matrix.shape == self.shape
@@ -95,7 +103,8 @@ class KeyDisplay(object):
         intensity=1.8,
         slc=(9,30),
         record_fname=None,
-        overwrite=False
+        overwrite=False,
+        zmq_port=None,
     ):        
         
         self.q = q  # keyboard input
@@ -106,9 +115,21 @@ class KeyDisplay(object):
         self.slc = slc
         self.status = "OK"
         self.cursor_radius = 10
-        
+        self.seq = 0
         # for recording data to a file
         self.key_recorder = KeyRecorder(fname=record_fname, overwrite=overwrite)                
+
+        # connect to zeromq to read/receive messagess
+        self.zmq_port = zmq_port
+        if self.zmq_port is not None:
+            context = zmq.Context()
+            self.zmq_socket = context.socket(zmq.DEALER)
+            self.zmq_socket.connect(f"tcp://localhost:{zmq_port}")
+            self.zmq_poller = zmq.Poller()
+            self.zmq_poller.register(self.zmq_socket, zmq.POLLIN)
+        else:
+            self.zmq_socket = None
+            self.zmq_poller = None
                 
         self.canvas = TKanvas(
             draw_fn=self.draw,
@@ -119,6 +140,7 @@ class KeyDisplay(object):
         )
 
         self.canvas.title("Ctrl-ESC-ESC-ESC to quit")
+        # create the matrix display
         self.matrix_display = TKMatrix(self.canvas, slc, self.block_size, cmap=cmasher.cm.bubblegum)                
         self.text = self.canvas.text(
             self.block_size / 2,
@@ -129,7 +151,13 @@ class KeyDisplay(object):
             font=("Arial", 16),            
         )
 
+        # click point (for data collection)
         self.cursor_point = self.canvas.circle(-100, -100, self.cursor_radius, fill="red")
+
+        # target point (from a remote server)
+        
+        self.target_point = self.canvas.circle(-100, -100, 1, outline="red", width=1)
+
 
     def event(self, src, etype, event):        
         if etype == "mouseup":
@@ -160,15 +188,50 @@ class KeyDisplay(object):
                 else:
                     self.key_recorder.close()
                     self.canvas.quit(None)
+                    if self.zmq_socket:
+                        self.zmq_socket.send(json.dumps({"quit":True}).encode("utf-8"))
+                        self.zmq_socket.close()
                    
         except queue.Empty:
             # no updates, do nothing
             pass
         
+    def update_zmq(self):
+        # read/write from the zmq socket
+        try:
+            buffer = self.model.key_buffer[:self.slc[0], :self.slc[1]]
+            request = json.dumps({"touch":buffer.tolist(), "seq":self.seq})
+            self.seq += 1
+            self.zmq_socket.send(request.encode("utf-8"), zmq.NOBLOCK)
+        except zmq.Again as e:
+            # we don't need to do anything here; the server isn't responding at the moment
+            pass
+
+        try_again = True
+        while try_again:
+            # poll without waiting
+            socks = dict(self.zmq_poller.poll(1))
+            if self.zmq_socket in socks and socks[self.zmq_socket] == zmq.POLLIN:
+                identity, response = self.zmq_socket.recv_multipart()
+                json_response = json.loads(response.decode("utf-8"))                
+                if "target" in json_response:
+                    # convert to screen coordinates
+                    x, y = self.matrix_display.unnormalised_coordinates(json_response["target"]["x"], json_response["target"]["y"])
+                    rx, ry = self.matrix_display.unnormalised_coordinates(json_response["target"]["x"]+json_response["target"]["radius"], json_response["target"]["y"])
+                    radius = rx - x
+                    self.canvas.canvas.coords(self.target_point, x-radius, y-radius, x+radius, y+radius)                                                           
+                try_again = True
+            else:
+                # nothing received, stop polling
+                try_again = False
+            
+
     def draw(self, src):
         # draw the blank squares for the outputs
         self.model.tick()
         self.matrix_display.update(self.model.key_buffer[:self.slc[0], :self.slc[1]])
+        if self.zmq_socket:
+            self.update_zmq()
 
 
 def key_tk(*args, **kwargs):
@@ -188,8 +251,9 @@ import click
 @click.command()
 @click.option("--file", default=None, help="Record filename")
 @click.option("--overwrite", is_flag=True, help="Overwrite record file")
-def start_key_display(file=None, overwrite=False):
-    k = KeyDisplay(q, record_fname=file, overwrite=overwrite)
+@click.option("--zmq_port", default=None, help="ZMQ port")
+def start_key_display(file=None, overwrite=False, zmq_port=None):
+    k = KeyDisplay(q, record_fname=file, overwrite=overwrite, zmq_port=zmq_port)
     mainloop()
 
 if __name__ == "__main__":
