@@ -14,8 +14,7 @@ from multiprocessing import Queue, Process
 import zmq
 import time
 import matplotlib.pyplot as plt
-import json
-from zmqutils import req_rep_loop
+from zmqutils import async_req_loop
 
 def tkcolor(rgb):
     return "#" + "".join(("%02X" % (int(c * 255)) for c in rgb[:3]))
@@ -102,19 +101,24 @@ class KeyDisplay(object):
         alpha=0.7,
         noise=0.02,     
         bw=0.03,   
+        frame_drop=0.0,
+        position_drift=0.0,
+        intensity_std=0.0,
         intensity=1.8,
         slc=(9,30),
         record_fname=None,
         overwrite=False,
         zmq_port=None,
+        lag=0,
     ):        
         
         self.q = q  # keyboard input
         self.local_dir = Path(__file__).parent
         self.key_map = shelve.open(self.local_dir / "keymap.db")    # connect to the keymap database
-        self.model = KeyModel(self.key_map, res, alpha=alpha, noise=noise, bw=bw, intensity=intensity)
-        self.block_size = 24
-        self.slc = slc
+        self.model = KeyModel(self.key_map, res, alpha=alpha, noise=noise, bw=bw, intensity=intensity,
+                              frame_drop=frame_drop, position_drift=position_drift, intensity_std=intensity_std, lag=lag,
+                              slc=slc)
+        self.block_size = 32
         self.status = "OK"
         self.cursor_radius = 10
         self.seq = 0
@@ -124,9 +128,8 @@ class KeyDisplay(object):
         # connect to zeromq to read/receive messages
         self.zmq_port = zmq_port
         if self.zmq_port is not None:
-            self.recv_q = Queue()
-            self.send_q = Queue()
-            self.zmq_process = Process(target=req_rep_loop, args=(self.zmq_port, self.send_q, self.recv_q))
+            self.recv_q, self.send_q = Queue(), Queue()
+            self.zmq_process = Process(target=async_req_loop, args=(self.zmq_port, self.send_q, self.recv_q))
             # guarantee that the process is killed when the main process is killed
             self.zmq_process.daemon = True
             self.zmq_process.start()
@@ -155,7 +158,6 @@ class KeyDisplay(object):
         self.cursor_point = self.canvas.circle(-100, -100, self.cursor_radius, fill="red")
 
         # target point (from a remote server)
-        
         self.target_point = self.canvas.circle(-100, -100, 1, outline="red", width=1)
 
 
@@ -164,7 +166,7 @@ class KeyDisplay(object):
             # on click, set the cursor display
             click = [event.x, event.y]
             self.canvas.canvas.moveto(self.cursor_point, click[0]-self.cursor_radius, click[1]-self.cursor_radius)
-            key_slice = self.model.key_buffer[:self.slc[0], :self.slc[1]]
+            key_slice = self.model.output
             nx, ny = self.matrix_display.normalised_coordinates(*click) # normalise screen coords to [0,1]
             
             self.key_recorder.write_row(key_slice, [nx, ny])
@@ -190,6 +192,11 @@ class KeyDisplay(object):
                     self.canvas.quit(None)
                     if self.zmq_port:
                         self.send_q.put({"quit":True})
+                        # kill it dead!
+                        time.sleep(0.5)
+                        self.zmq_process.terminate()
+                        time.sleep(0.5)
+                        self.zmq_process.kill()
         except queue.Empty:
             # no updates, do nothing
             pass
@@ -200,7 +207,7 @@ class KeyDisplay(object):
         self.seq += 1
         
         # read/write from the zmq socket
-        buffer = self.model.key_buffer[:self.slc[0], :self.slc[1]]
+        buffer = self.model.output
         try:
             self.send_q.put_nowait({"touch":buffer.tolist(), "seq":self.seq})
         except queue.Full:
@@ -218,16 +225,16 @@ class KeyDisplay(object):
                 if "target" in response:
                     # convert to screen coordinates
                     x, y = self.matrix_display.unnormalised_coordinates(response["target"]["x"], response["target"]["y"])
-                    rx, ry = self.matrix_display.unnormalised_coordinates(response["target"]["x"]+response["target"]["radius"], json_response["target"]["y"])
-                    print(x, y, rx, ry)
+                    rx, ry = self.matrix_display.unnormalised_coordinates(response["target"]["x"]+response["target"]["radius"], response["target"]["y"])
                     radius = rx - x
                     self.canvas.canvas.coords(self.target_point, x-radius, y-radius, x+radius, y+radius)                                                           
                 
 
     def draw(self, src):
         # draw the blank squares for the outputs
+        
         self.model.tick()
-        self.matrix_display.update(self.model.key_buffer[:self.slc[0], :self.slc[1]])   
+        self.matrix_display.update(self.model.output)   
         self.update_zmq()
 
 
@@ -249,8 +256,15 @@ import click
 @click.option("--file", default=None, help="Record filename")
 @click.option("--overwrite", is_flag=True, help="Overwrite record file")
 @click.option("--zmq_port", default=None, help="ZMQ port")
-def start_key_display(file=None, overwrite=False, zmq_port=None):
-    k = KeyDisplay(q, record_fname=file, overwrite=overwrite, zmq_port=zmq_port)
+@click.option("--noise", default=0.02, help="Noise level")
+@click.option("--frame_drop", default=0.0, help="Frame drop fraction")
+@click.option("--position_drift", default=0.0, help="Position drift fraction")
+@click.option("--intensity_std", default=0.0, help="Intensity standard deviation")
+@click.option("--bw", default=0.04, help="Bandwidth")
+@click.option("--lag", default=0, help="Lag (in frames)")
+def start_key_display(file=None, overwrite=False, zmq_port=None, noise=0.02, frame_drop=0.0, position_drift=0.0, bw=0.04, lag=0, intensity_std=0.0):
+    k = KeyDisplay(q, record_fname=file, overwrite=overwrite, zmq_port=zmq_port,
+                   noise=noise, frame_drop=frame_drop, position_drift=position_drift, intensity_std=intensity_std, bw=bw, lag=lag)
     mainloop()
 
 if __name__ == "__main__":
