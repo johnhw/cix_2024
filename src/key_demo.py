@@ -15,10 +15,12 @@ import zmq
 import time
 import matplotlib.pyplot as plt
 import json
-
+from zmqutils import req_rep_loop
 
 def tkcolor(rgb):
     return "#" + "".join(("%02X" % (int(c * 255)) for c in rgb[:3]))
+
+
 
 
 class TKMatrix(object):
@@ -119,17 +121,15 @@ class KeyDisplay(object):
         # for recording data to a file
         self.key_recorder = KeyRecorder(fname=record_fname, overwrite=overwrite)                
 
-        # connect to zeromq to read/receive messagess
+        # connect to zeromq to read/receive messages
         self.zmq_port = zmq_port
         if self.zmq_port is not None:
-            context = zmq.Context()
-            self.zmq_socket = context.socket(zmq.DEALER)
-            self.zmq_socket.connect(f"tcp://localhost:{zmq_port}")
-            self.zmq_poller = zmq.Poller()
-            self.zmq_poller.register(self.zmq_socket, zmq.POLLIN)
-        else:
-            self.zmq_socket = None
-            self.zmq_poller = None
+            self.recv_q = Queue()
+            self.send_q = Queue()
+            self.zmq_process = Process(target=req_rep_loop, args=(self.zmq_port, self.send_q, self.recv_q))
+            # guarantee that the process is killed when the main process is killed
+            self.zmq_process.daemon = True
+            self.zmq_process.start()
                 
         self.canvas = TKanvas(
             draw_fn=self.draw,
@@ -188,50 +188,47 @@ class KeyDisplay(object):
                 else:
                     self.key_recorder.close()
                     self.canvas.quit(None)
-                    if self.zmq_socket:
-                        self.zmq_socket.send(json.dumps({"quit":True}).encode("utf-8"))
-                        self.zmq_socket.close()
-                   
+                    if self.zmq_port:
+                        self.send_q.put({"quit":True})
         except queue.Empty:
             # no updates, do nothing
             pass
         
     def update_zmq(self):
+        if self.zmq_port is None:
+            return
+        self.seq += 1
+        
         # read/write from the zmq socket
+        buffer = self.model.key_buffer[:self.slc[0], :self.slc[1]]
         try:
-            buffer = self.model.key_buffer[:self.slc[0], :self.slc[1]]
-            request = json.dumps({"touch":buffer.tolist(), "seq":self.seq})
-            self.seq += 1
-            self.zmq_socket.send(request.encode("utf-8"), zmq.NOBLOCK)
-        except zmq.Again as e:
-            # we don't need to do anything here; the server isn't responding at the moment
+            self.send_q.put_nowait({"touch":buffer.tolist(), "seq":self.seq})
+        except queue.Full:
             pass
-
+        
+        # respond to cursor updates    
         try_again = True
         while try_again:
-            # poll without waiting
-            socks = dict(self.zmq_poller.poll(1))
-            if self.zmq_socket in socks and socks[self.zmq_socket] == zmq.POLLIN:
-                identity, response = self.zmq_socket.recv_multipart()
-                json_response = json.loads(response.decode("utf-8"))                
-                if "target" in json_response:
+            response = None 
+            try:
+                response = self.recv_q.get_nowait()
+            except queue.Empty:
+                try_again = False
+            if response is not None:
+                if "target" in response:
                     # convert to screen coordinates
-                    x, y = self.matrix_display.unnormalised_coordinates(json_response["target"]["x"], json_response["target"]["y"])
-                    rx, ry = self.matrix_display.unnormalised_coordinates(json_response["target"]["x"]+json_response["target"]["radius"], json_response["target"]["y"])
+                    x, y = self.matrix_display.unnormalised_coordinates(response["target"]["x"], response["target"]["y"])
+                    rx, ry = self.matrix_display.unnormalised_coordinates(response["target"]["x"]+response["target"]["radius"], json_response["target"]["y"])
+                    print(x, y, rx, ry)
                     radius = rx - x
                     self.canvas.canvas.coords(self.target_point, x-radius, y-radius, x+radius, y+radius)                                                           
-                try_again = True
-            else:
-                # nothing received, stop polling
-                try_again = False
-            
+                
 
     def draw(self, src):
         # draw the blank squares for the outputs
         self.model.tick()
-        self.matrix_display.update(self.model.key_buffer[:self.slc[0], :self.slc[1]])
-        if self.zmq_socket:
-            self.update_zmq()
+        self.matrix_display.update(self.model.key_buffer[:self.slc[0], :self.slc[1]])   
+        self.update_zmq()
 
 
 def key_tk(*args, **kwargs):

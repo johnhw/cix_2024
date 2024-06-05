@@ -1,0 +1,7 @@
+* fix queue communication (separate process to handle REP/REQ workflow?)
+* finish particle filter specification
+* implement particle filter live loop
+* create exercise skeleton
+* finish review on combining forward and inverse models
+* set questions?
+
