@@ -139,7 +139,6 @@ class KeyDisplay(object):
         # for recording data to a file
         self.key_recorder = KeyRecorder(fname=record_fname, overwrite=overwrite)
         self.timeseries_mode = timeseries_mode
-        print(f"Timeseries mode: {self.timeseries_mode}")
         # connect to zeromq to read/receive messages
         self.zmq_port = zmq_port
         if self.zmq_port is not None:
@@ -207,6 +206,8 @@ class KeyDisplay(object):
                 if result:
                     arr_bytes, t, code, event, name = result
                     code = str(code)
+                    if code=="1":
+                        self.model.clear()
                     if event == "down":
                         self.model.down(code)
                     else:

@@ -53,6 +53,9 @@ class KeyModel:
             self.keys_down.add(code)
             self.states[code] = "down"
 
+    def clear(self):
+        self.keys_down.clear()
+
     def tick(self):
         self.key_image[:] = 0.0
         for code in self.keys_down:
