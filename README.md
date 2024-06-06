@@ -1,8 +1,9 @@
 # CIX 2024: Forward and Inverse Modelling in HCI
 ![CI](imgs/header.png)
 
-* Computational Interaction Summer School 2024: Notes on forward and inverse modelling in HCI.
-* John H. Williamson, University of Glasgow.
+* 8th International Computational Interaction Summer School 2024: Luxembourg
+* Notes on forward and inverse modelling in HCI.
+* **John H. Williamson**, *University of Glasgow*.
 
 ![CI](imgs/finger_track.png)
 
