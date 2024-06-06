@@ -203,6 +203,7 @@ class KeyDisplay(object):
                 self.canvas.canvas.moveto(self.cursor_point, -100, -100)
                 # read results
                 result = self.q.get(block=False)
+                # did we get a key press?
                 if result:
                     arr_bytes, t, code, event, name = result
                     code = str(code)
@@ -214,6 +215,8 @@ class KeyDisplay(object):
                         self.model.up(code)
 
                 else:
+                    # no more key presses, close the record file
+                    # and shut it all down
                     self.key_recorder.close()
                     self.canvas.quit(None)
                     if self.zmq_port:
@@ -296,17 +299,17 @@ import click
 
 
 @click.command()
-@click.option("--file", default=None, help="Record filename")
+@click.option("--file", default=None, help="Record filename, for creating training data or timeseries mode")
 @click.option("--overwrite", is_flag=True, help="Overwrite record file")
-@click.option("--zmq_port", default=None, help="ZMQ port")
+@click.option("--zmq_port", default=None, help="ZMQ port, for live input")
 @click.option("--noise", default=0.02, help="Noise level")
 @click.option("--frame_drop", default=0.0, help="Frame drop fraction")
 @click.option("--position_drift", default=0.0, help="Position drift fraction")
 @click.option("--intensity_std", default=0.0, help="Intensity standard deviation")
 @click.option("--bw", default=0.04, help="Bandwidth")
-@click.option("--lag", default=0, help="Lag (in frames)")
+@click.option("--lag", default=0, help="Simulated lag (in frames)")
 @click.option("--bw_std", default=0.0, help="Bandwidth standard deviation")
-@click.option("--timeseries_mode", is_flag=True, help="Timeseries mode")
+@click.option("--timeseries_mode", is_flag=True, help="Timeseries mode (record continuously, without any target positions)")
 def start_key_display(
     file=None,
     timeseries_mode=False,
