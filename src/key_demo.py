@@ -177,6 +177,11 @@ class KeyDisplay(object):
             -100, -100, self.cursor_radius, fill="red"
         )
 
+        self.cursor_h_crosshair = self.canvas.line(
+            0, 0, 0, self.canvas.h, fill="red", width=1)
+        self.cursor_v_crosshair = self.canvas.line(
+            0, 0, self.canvas.w, 0, fill="red", width=1)
+        
         # target point (from a remote server)
         self.target_point = self.canvas.circle(-100, -100, 1, outline="red", width=1)
 
@@ -268,6 +273,11 @@ class KeyDisplay(object):
                         x + radius,
                         y + radius,
                     )
+                    self.canvas.canvas.coords(
+                        self.cursor_h_crosshair, 0, y, self.canvas.w, y)
+                    self.canvas.canvas.coords(
+                        self.cursor_v_crosshair, x, 0, x, self.canvas.h)
+                    
 
     def draw(self, src):
         # draw the blank squares for the outputs
