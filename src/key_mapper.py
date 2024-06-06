@@ -12,7 +12,7 @@ import time
 import matplotlib.pyplot as plt
 import shelve 
 from PIL import Image, ImageTk
-
+from pathlib import Path
 
 def tkcolor(rgb):
     return "#" + "".join(("%02X" % (int(c * 255)) for c in rgb[:3]))
@@ -23,13 +23,12 @@ class KeyDisplay(object):
         q,
         
     ):
-        
+        root_path = Path(__file__).parent
         self.q = q  # keyboard input
         self.keys = np.zeros(128, dtype=np.float32)
 
-
-        self.key_map = shelve.open("keymap.db")    # connect to the keymap database
-        self.keyboard_image = Image.open("../imgs/qwerty.png") # load the keyboard image
+        self.key_map = shelve.open(root_path / "keymap.db")    # connect to the keymap database
+        self.keyboard_image = Image.open(root_path / "../imgs/qwerty.png") # load the keyboard image
         self.key_map["width"] = self.keyboard_image.width
         self.key_map["height"] = self.keyboard_image.height
         self.key_map.sync()
@@ -92,7 +91,7 @@ class KeyDisplay(object):
         
     def draw(self, src):
         # draw the blank squares for the outputs        
-        self.canvas.canvas.moveto(self.cursor_point, self.cursor[0], self.cursor[1])                        
+        self.canvas.canvas.moveto(self.cursor_point, self.cursor[0]-10, self.cursor[1]-10)                        
 
 
 def key_tk(*args, **kwargs):

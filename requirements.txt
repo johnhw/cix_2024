@@ -4,6 +4,7 @@ numpy
 scipy
 ipykernel
 jupyter
+notebook==6.1.5
 pillow
 cmasher
 jax
@@ -12,3 +13,4 @@ flax
 click
 scikit-learn
 zmq
+pfilter @ https://github.com/johnhw/pfilter/archive/refs/tags/0.2.5.zip

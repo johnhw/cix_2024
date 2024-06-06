@@ -115,14 +115,20 @@ def sub_loop(self, port, topic, sub_q):
 
 
 def safe_launch(script_path, args=[], timeout=60, sudo=False):
+    t = time.time()
     cmd = [sys.executable, script_path]
     if sudo:
         cmd = ['sudo'] + cmd
     process = subprocess.Popen(cmd + args, creationflags=subprocess.CREATE_NEW_CONSOLE)
     if timeout==0: # no block mode
         return
-    time.sleep(timeout)
+    while time.time() - t < timeout:
+        if process.poll() is not None:
+            return
+        time.sleep(1)
     process.terminate()
+    time.sleep(1)
+    process.kill()
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:

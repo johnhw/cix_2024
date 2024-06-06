@@ -58,6 +58,7 @@ def capture_keys(queue):
 if __name__=="__main__":    
     q = Queue()
     keys = Process(target=capture_keys, args=(q,))
+    keys.daemon = True
     keys.start()
     result = q.get()
     while result:

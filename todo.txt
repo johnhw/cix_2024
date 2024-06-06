@@ -1,7 +1,9 @@
-* finish particle filter specification
+* record offline data for PF
+* implement offline particle filter display
 * implement particle filter live loop
-* create exercise skeleton for pf section
 * finish review on combining forward and inverse models
-* set questions on mentimeter
-* add noise conditions for demo
+* test the whole notebook carefully with run all! check data files, simulation and live demos
+* Edit/trim for flow and clarity
+* upload to github
+
 
