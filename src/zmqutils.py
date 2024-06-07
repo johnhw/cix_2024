@@ -112,14 +112,17 @@ def sub_loop(self, port, topic, sub_q):
         sub_q.put(json_decode(message))
           
 
-
+from sys import platform
 
 def safe_launch(script_path, args=[], timeout=60, sudo=False):
     t = time.time()
     cmd = [sys.executable, script_path]
     if sudo:
-        cmd = ['sudo'] + cmd
-    process = subprocess.Popen(cmd + args, creationflags=subprocess.CREATE_NEW_CONSOLE)
+        cmd = ['gksudo'] + cmd
+    if platform == "linux" or platform == "linux2":
+        process = subprocess.Popen(cmd + args, shell=True)
+    else:
+        process = subprocess.Popen(cmd + args, creationflags=subprocess.CREATE_NEW_CONSOLE)
     if timeout==0: # no block mode
         return
     while time.time() - t < timeout:
