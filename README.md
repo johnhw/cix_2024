@@ -12,3 +12,8 @@
 * Activate it (if necessary, e.g. `conda activate cix2024_jhw`)
 * Install the requirements with `pip install -r requirements.txt`
 * Open  [01_Introduction.ipynb](01_Introduction.ipynb) 
+
+# Acknowledgements
+![DIFAI](imgs/difai.png)
+
+Supported by the project **Designing Interaction Freedom via Active Inference (DIFAI)**, ERC Advanced Grant proposal 101097708, funded by the UK Horizon guarantee scheme as EPSRC project EP/Y029178/1.
