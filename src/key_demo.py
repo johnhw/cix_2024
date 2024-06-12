@@ -178,12 +178,12 @@ class KeyDisplay(object):
         )
 
         self.cursor_h_crosshair = self.canvas.line(
-            0, 0, 0, self.canvas.h, fill="red", width=1)
+            0, 0, 0, self.canvas.h, fill="white", width=1)
         self.cursor_v_crosshair = self.canvas.line(
-            0, 0, self.canvas.w, 0, fill="red", width=1)
+            0, 0, self.canvas.w, 0, fill="white", width=1)
         
         # target point (from a remote server)
-        self.target_point = self.canvas.circle(-100, -100, 1, outline="red", width=1)
+        self.target_point = self.canvas.circle(-100, -100, 1, outline="white", width=2)
 
     def event(self, src, etype, event):
         if etype == "mouseup":
